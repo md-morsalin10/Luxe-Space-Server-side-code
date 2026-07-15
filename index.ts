@@ -13,6 +13,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 const uri = process.env.MONGO_URI || "";
+const PORT = process.env.PORT || 5000;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
@@ -26,7 +27,7 @@ const client = new MongoClient(uri, {
 async function run() {
     try {
         // Connect the client to the server
-        await client.connect();
+        // await client.connect();
 
         const database = client.db("LuxeSpace");
         const userCollection = database.collection("user");
@@ -138,7 +139,7 @@ async function run() {
             }
         });
 
-        // DELETE API: প্রোপার্টি ডিলিট করার রুট (যদি sold না থাকে)
+     
         app.delete("/api/property/:id", async (req: Request, res: Response) => {
             try {
                 const id = req.params.id as string;
@@ -240,11 +241,13 @@ async function run() {
 }
 run().catch(console.dir);
 
+
+
 app.get("/", (req: Request, res: Response) => {
-    res.send("LuxeSpace Server Running...");
+    res.send("LuxeSpace Server Running");
 });
 
-const PORT = process.env.PORT || 5000;
+
 
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
