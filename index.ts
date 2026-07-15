@@ -36,7 +36,44 @@ async function run() {
         // API Route
         // post api to insert data into the property collection
 
-       
+        app.get("/api/features/properties", async (req: Request, res: Response) => {
+            const query = {};
+            const properties = await propertyCollection.find(query).limit(8).sort({ createdAt: -1 }).toArray();
+            res.send(properties);
+        })
+
+        app.get("/api/payment", async (req: Request, res: Response) => {
+            try {
+                const query: any = {};
+
+                // ১. যদি বায়ারের আইডি দিয়ে সার্চ করতে চান (ডাটাবেজে ফিল্ড: buyer.id)
+                if (req.query.userId) {
+                    query["buyer.id"] = req.query.userId;
+                }
+
+                // ২. যদি বায়ারের ইমেইল দিয়ে সার্চ করতে চান (ডাটাবেজে ফিল্ড: buyer.email)
+                if (req.query.userEmail) {
+                    query["buyer.email"] = req.query.userEmail;
+                }
+
+                // ৩. যদি সেলারের আইডি দিয়ে সার্চ করতে চান (ডাটাবেজে ফিল্ড: seller.id)
+                if (req.query.sellerId) {
+                    query["seller.id"] = req.query.sellerId;
+                }
+
+                // ডাটাবেজ থেকে ডেটা খোঁজা
+                const userPayment = await paymentCollection.find(query).toArray();
+
+                res.status(200).json(userPayment);
+
+            } catch (error: any) {
+                console.error("Error fetching payments:", error);
+                res.status(500).json({
+                    message: "Internal server error while fetching payment history",
+                    error: error.message
+                });
+            }
+        });
         app.post("/api/payment", async (req: Request, res: Response) => {
             const { sessionId, propertyId, title, price, type, location, image, sellerId, sellerEmail, sellerName, buyerId, buyerEmail, buyerName } = req.body;
 
@@ -101,6 +138,49 @@ async function run() {
             }
         });
 
+        // DELETE API: প্রোপার্টি ডিলিট করার রুট (যদি sold না থাকে)
+        app.delete("/api/property/:id", async (req: Request, res: Response) => {
+            try {
+                const id = req.params.id as string;
+
+                // ১. আইডি ফরম্যাট ভ্যালিড কি না চেক করা
+                if (!ObjectId.isValid(id)) {
+                    return res.status(400).json({ message: "Invalid property ID format" });
+                }
+
+                const query = { _id: new ObjectId(id) };
+
+                // ২. প্রোপার্টিটি ডাটাবেজে আছে কি না এবং সেটির স্ট্যাটাস চেক করা
+                const property = await propertyCollection.findOne(query);
+
+                if (!property) {
+                    return res.status(404).json({ message: "Property not found" });
+                }
+
+                // ৩. স্ট্যাটাস 'sold' হলে ডিলিট প্রসেস ব্লক করা
+                if (property.status === "sold") {
+                    return res.status(400).json({
+                        message: "Action denied. Sold properties cannot be deleted from the system."
+                    });
+                }
+
+                // ৪. প্রোপার্টি ডিলিট করা
+                const result = await propertyCollection.deleteOne(query);
+
+                if (result.deletedCount === 1) {
+                    res.status(200).json({ message: "Property successfully deleted", result });
+                } else {
+                    res.status(500).json({ message: "Failed to delete the property" });
+                }
+
+            } catch (error: any) {
+                console.error("Error deleting property:", error);
+                res.status(500).json({
+                    message: "Internal server error while deleting property",
+                    error: error.message
+                });
+            }
+        });
 
         // get api 
 
@@ -141,7 +221,7 @@ async function run() {
 
 
 
-        app.get("/api/user", async (req: Request, res: Response) => {
+        app.get("/api/users", async (req: Request, res: Response) => {
             try {
                 const result = await userCollection.find().sort({ createdAt: -1 }).toArray();
                 res.send(result);
@@ -151,7 +231,7 @@ async function run() {
         });
 
         // Send a ping to confirm a successful connection
-        await client.db("admin").command({ ping: 1 });
+        // await client.db("admin").command({ ping: 1 });
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
     } catch (error) {
         console.error("Database connection error:", error);
