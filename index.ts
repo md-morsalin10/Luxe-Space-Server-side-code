@@ -9,6 +9,12 @@ dotenv.config();
 const app = express();
 
 app.use(cors());
+app.use(cors({
+    origin: process.env.FRONTEND_URL, 
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"]
+}));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -47,22 +53,17 @@ async function run() {
             try {
                 const query: any = {};
 
-                // ১. যদি বায়ারের আইডি দিয়ে সার্চ করতে চান (ডাটাবেজে ফিল্ড: buyer.id)
                 if (req.query.userId) {
                     query["buyer.id"] = req.query.userId;
                 }
 
-                // ২. যদি বায়ারের ইমেইল দিয়ে সার্চ করতে চান (ডাটাবেজে ফিল্ড: buyer.email)
                 if (req.query.userEmail) {
                     query["buyer.email"] = req.query.userEmail;
                 }
-
-                // ৩. যদি সেলারের আইডি দিয়ে সার্চ করতে চান (ডাটাবেজে ফিল্ড: seller.id)
                 if (req.query.sellerId) {
                     query["seller.id"] = req.query.sellerId;
                 }
 
-                // ডাটাবেজ থেকে ডেটা খোঁজা
                 const userPayment = await paymentCollection.find(query).toArray();
 
                 res.status(200).json(userPayment);
@@ -79,15 +80,10 @@ async function run() {
             const { sessionId, propertyId, title, price, type, location, image, sellerId, sellerEmail, sellerName, buyerId, buyerEmail, buyerName } = req.body;
 
             try {
-                // ১. সেশন আইডি ভ্যালিডেশন (ডুপ্লিকেট পেমেন্ট রোধ করতে)
+
                 if (!sessionId) {
                     return res.status(400).json({ message: "Session ID is required" });
                 }
-
-                // const isExist = await paymentCollection.findOne({ sessionId });
-                // if (isExist) {
-                //     return res.status(400).json({ message: "Payment data already exists for this sessionId" });
-                // }
 
                 const paymentData = {
                     sessionId,
@@ -123,7 +119,7 @@ async function run() {
                 );
 
                 const result = await paymentCollection.insertOne(paymentData);
-                res.status(201).json(result); // res.send এর বদলে res.json ব্যবহার করা নিরাপদ
+                res.status(201).json(result);
             } catch (error) {
                 res.status(500).json({ message: "Error inserting payment data", error });
             }
@@ -139,33 +135,29 @@ async function run() {
             }
         });
 
-     
+
         app.delete("/api/property/:id", async (req: Request, res: Response) => {
             try {
                 const id = req.params.id as string;
 
-                // ১. আইডি ফরম্যাট ভ্যালিড কি না চেক করা
                 if (!ObjectId.isValid(id)) {
                     return res.status(400).json({ message: "Invalid property ID format" });
                 }
 
                 const query = { _id: new ObjectId(id) };
 
-                // ২. প্রোপার্টিটি ডাটাবেজে আছে কি না এবং সেটির স্ট্যাটাস চেক করা
                 const property = await propertyCollection.findOne(query);
 
                 if (!property) {
                     return res.status(404).json({ message: "Property not found" });
                 }
 
-                // ৩. স্ট্যাটাস 'sold' হলে ডিলিট প্রসেস ব্লক করা
                 if (property.status === "sold") {
                     return res.status(400).json({
                         message: "Action denied. Sold properties cannot be deleted from the system."
                     });
                 }
 
-                // ৪. প্রোপার্টি ডিলিট করা
                 const result = await propertyCollection.deleteOne(query);
 
                 if (result.deletedCount === 1) {
@@ -183,14 +175,51 @@ async function run() {
             }
         });
 
-        // get api 
+    
+        app.delete("/api/users/:id", async (req: Request, res: Response) => {
+            try {
+                const id = req.params.id as string;
+
+                if (!ObjectId.isValid(id)) {
+                    return res.status(400).json({ message: "Invalid user ID format" });
+                }
+
+                const query = { _id: new ObjectId(id) };
+
+                const user = await userCollection.findOne(query);
+                if (!user) {
+                    return res.status(404).json({ message: "User not found" });
+                }
+
+            
+                if (user.role === "admin") {
+                    return res.status(403).json({ message: "Action denied. Admin accounts cannot be deleted." });
+                }
+
+               
+                const result = await userCollection.deleteOne(query);
+
+                if (result.deletedCount === 1) {
+                    res.status(200).json({ message: "User successfully deleted from the network database", result });
+                } else {
+                    res.status(500).json({ message: "Failed to delete the user" });
+                }
+
+            } catch (error: any) {
+                console.error("Error deleting user:", error);
+                res.status(500).json({
+                    message: "Internal server error while deleting user",
+                    error: error.message
+                });
+            }
+        });
+      
 
         // get single property by ID api
         app.get("/api/property/:id", async (req: Request, res: Response) => {
             try {
                 const id = req.params.id as string;
 
-                // আইডি ফরম্যাট ভ্যালিড কি না চেক করা
                 if (!ObjectId.isValid(id)) {
                     return res.status(400).send({ message: "Invalid property ID format" });
                 }
